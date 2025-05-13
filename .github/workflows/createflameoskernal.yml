@@ -13,25 +13,30 @@ jobs:
     runs-on: ubuntu-latest
     name: Generate and Upload Patch
     steps:
-      - name: Checkout modified kernel (your repo)
+      - name: Checkout modified kernel (this repo)
         uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y zstd curl tar
+          sudo apt install -y zstd curl tar rsync
 
-      - name: Download original Linux source
+      - name: Download official Linux source
         run: |
           curl -LO https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${{ github.event.inputs.base_version }}.tar.xz
           tar -xf linux-${{ github.event.inputs.base_version }}.tar.xz
 
-      - name: Generate patch
+      - name: Generate clean source copy (exclude .git, .github)
         run: |
-          diff -Naur linux-${{ github.event.inputs.base_version }} . > linux-v${{ github.event.inputs.base_version }}-flameos.patch || true
+          mkdir temp-src
+          rsync -a --exclude 'linux-${{ github.event.inputs.base_version }}' --exclude '.git' --exclude '.github' ./ temp-src/
+
+      - name: Generate and compress patch
+        run: |
+          diff -Naur linux-${{ github.event.inputs.base_version }} temp-src > linux-v${{ github.event.inputs.base_version }}-flameos.patch || true
           zstd -19 linux-v${{ github.event.inputs.base_version }}-flameos.patch -o linux-v${{ github.event.inputs.base_version }}-flameos.patch.zst
 
-      - name: Create GitHub Release and upload patch
+      - name: Upload patch to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.event.inputs.base_version }}-flameos
